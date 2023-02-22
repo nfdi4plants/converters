@@ -19,7 +19,7 @@ jobs:
     - name: Install FSharpPacker
       run: dotnet tool install --global FSharpPacker
     - name: Pack
-      run: fspack converters/arc-convert-geo.fsx -o pkg/win-x64 -r win-x64 -f net7.0 -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+      run: fspack converters/arc-convert-geo.fsx -o pkg/win-x64 -r win-x64 -f net7.0
     - uses: "marvinpinto/action-automatic-releases@latest"
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -27,7 +27,7 @@ jobs:
         prerelease: false
         title: "v0.0.1-win.x64"
         files: |
-            pkg/win-x64/arc-convert-geo.exe
+            pkg/win-x64/arc-convert-geo.dll
 
   release-github-linux:
     
