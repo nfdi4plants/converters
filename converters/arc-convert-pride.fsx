@@ -5,6 +5,7 @@ open ISADotNet
 open ISADotNet.QueryModel
 open ISADotNet.QueryModel.Linq
 open ISADotNet.QueryModel.Linq.Spreadsheet
+open Helpers
 open FsSpreadsheet.DSL
 open FsSpreadsheet.ExcelIO
 open System.IO
@@ -15,18 +16,22 @@ let outPath = Path.Combine(arcDir, ".arc", "GEO.xlsx")
 let investigation = Investigation.fromArcFolder arcDir
 
 let study = investigation.Studies.Value.Head |> API.Study.update
+let assay = arcIO.NET.Assay.readByName arcDir "aid" |> snd
 
-let ps = QStudy.fromStudy(study).FullProcessSequence
+let pss = QStudy.fromStudy(study).FullProcessSequence
+let psa = QStudy.fromAssay(assay)
+
 
 type ISAQueryBuilder with
     
     /// Adjusts a text to fit set char limits.
     [<CustomOperation "adjustToCharLimits">]
-    member this.AdjustToCharLimits(source: QuerySource<string, 'Q>, minLimit, maxLimit) =
+    member this.AdjustToCharLimits(text: string, minLimit, maxLimit) =
         match text.Length with
         | x when x < minLimit -> ""
         | x when x > maxLimit -> $"{text[.. maxLimit - 1 - 5]}[...]"
         | _ -> text
+
 
 sheet "" {
     row {
@@ -88,16 +93,23 @@ sheet "" {
         "MTD"
         "sample_processing_protocol"
         cells {
-            for prot in ps.Protocols do
+            for prot in pss.Protocols do
                 selectDescriptionText
                 concat ';'
-                //adjustToCharLimits 50 5000
+                adjustToCharLimits 50 5000
         }
         required
     }
     row {
         "MTD"
         "data_processing_protocol"
+        cells {
+            for prot in psa.Protocols do
+                selectDescriptionText
+                concat ';'
+                adjustToCharLimits 50 5000
+        }
+        required
     }
 }
 
