@@ -1,68 +1,22 @@
-#r "nuget: Argu"
-#r "nuget: arcIO.NET, 0.1.0-preview.4" 
+#r "nuget: arcIO.NET, 0.1.0-preview.5" 
+#r "nuget: FSharp.Data, 5.0.2"
 
-
-open System.IO
 open ISADotNet
 open ISADotNet.QueryModel
 open ISADotNet.QueryModel.Linq.Spreadsheet
-open arcIO.NET
+open arcIO.NET.Converter
 open FsSpreadsheet.DSL
-open FsSpreadsheet.ExcelIO
-
-open Argu
-
-let prompt (msg:string) =
-    System.Console.Write(msg)
-    System.Console.ReadLine().Trim()
-    |> function | "" -> None | s -> Option.Some s
-    |> Option.map (fun s -> s.Replace ("\"","\\\""))
-
-let rec promptYesNo msg =
-    match prompt (sprintf "%s [Yn]: " msg) with
-    | Option.Some "Y" | Option.Some "y" -> true
-    | Option.Some "N" | Option.Some "n" -> false
-    | _ -> System.Console.WriteLine("Sorry, invalid answer"); promptYesNo msg
-
-type CliArguments =
-    | [<Mandatory>][<AltCommandLine("-p")>] ARC_Directory of arc_dir:string
-    | [<AltCommandLine("-o")>] Out_File of out_path:string
-
-    interface IArgParserTemplate with
-        member s.Usage =
-            match s with
-            | ARC_Directory _ -> "The path to the root diretoy of the ARC."
-            | Out_File _ -> "Optional path for where the metadata json file should be written to, else written to ARC_DIRECTORY/metadata.json"
-
-[<EntryPoint>]
-let main argv =
-
-    let parser = ArgumentParser.Create<CliArguments>()
-    let results = parser.Parse argv
-
-    let arcDir = results.GetResult(ARC_Directory)
-    let outPath = 
-        results.TryGetResult(Out_File)
-        |> Option.defaultValue (Path.Combine(arcDir,".arc/GEO.xlsx"))
-
-    let investigation = Investigation.fromArcFolder arcDir
-
-    let study = investigation.Studies.Value.Head |> API.Study.update
-
-    // Create queryable object
-    let ps = 
-        QStudy.fromStudy(study).FullProcessSequence
-        //QAssay.fromAssay(assay)
+open FSharp.Data
 
 
-    let ontology = 
-        File.ReadAllLines (Path.Combine([|arcDir;".arc";"dpbo.obo"|]))
-        |> Seq.append (File.ReadAllLines (Path.Combine([|arcDir;".arc";"GEO.obo"|])))
-        |> Obo.OboOntology.fromLines false
 
-
-    // Create spreadsheet building blocks using ISADotNet querymodel and FsSpreadsheet DSL
-    let output = 
+let create() = ARCconverter.ARCtoXLSX (
+    fun i s a ->
+        
+        let geoOntology = 
+            Http.Request(@"https://raw.githubusercontent.com/nfdi4plants/converters/main/ontologies/geo.obo").Body.ToString().Split('\n')
+            |> Obo.OboOntology.fromLines false
+       
         workbook {
             sheet "MyAssay" {
 
@@ -71,17 +25,18 @@ let main argv =
                 row {
                     "title"
                     required
-                    !! study.Title
+                    !! s.Title
                 }
                 row {
                     "summary (abstract)"
                     required
-                    !! study.Description
+                    !! s.Description
                 }
-                if study.Contacts.IsNone then dropSheet (message "No contributors in the assay file")
-                for person in study.Contacts.Value do
+                if s.Contacts.IsNone then dropSheet (message "No contributors in the assay file")
+                for person in s.Contacts |> Option.defaultValue [] do
                     row {
                         "contributor"
+                        optional
                         cell {
                             Concat ','
                             !! person.FirstName
@@ -97,20 +52,20 @@ let main argv =
                 column {
                     "library name"
                     required
-                    for sample in ps.LastSamples do
+                    for sample in s.LastSamples do
                         sample.Name
                 }
             
                 column {
                     "title"
                     required
-                    for sample in ps.LastSamples do
+                    for sample in s.LastSamples do
                         sample.Name
                 }
                 column {
                     "organism"
                     required
-                    for sample in ps.LastSamples do
+                    for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
                                 whereCategory "Organism" "DPBO" "DPBO:11111111"
@@ -122,7 +77,7 @@ let main argv =
                 column {
                     "cell line"
                     optional
-                    for sample in ps.LastSamples do
+                    for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
                                 whereName "Cell line"
@@ -134,7 +89,7 @@ let main argv =
                 column {
                     "cell type"
                     optional
-                    for sample in ps.LastSamples do
+                    for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
                                 whereName "Sample type"
@@ -146,7 +101,7 @@ let main argv =
                 column {
                     "genotype"
                     optional
-                    for sample in ps.LastSamples do
+                    for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
                                 whereName "Genotype"
@@ -158,7 +113,7 @@ let main argv =
                 column {
                     "molecule"
                     required
-                    for sample in ps.LastSamples do
+                    for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
                                 whereName "Library Selection"
@@ -171,7 +126,7 @@ let main argv =
                 column {
                     "single or paired-end"
                     required
-                    for sample in ps.LastSamples do
+                    for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
                                 whereName "Library layout"
@@ -184,7 +139,7 @@ let main argv =
                 column {
                     "age"
                     optional
-                    for sample in ps.LastSamples do
+                    for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
                                 whereName "time"
@@ -197,7 +152,7 @@ let main argv =
                 column {
                     "instrument model"
                     required
-                    for sample in ps.LastSamples do
+                    for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
                                 whereName "next generation sequencing instrument model"                                 // this
@@ -211,24 +166,28 @@ let main argv =
 
                 // This is kind of a tricky task for a general purpose query model, as the number of columns depends on the given input
                 // Maybe I will find a way to make this nicer
-                // Until then, this might be one possiblity that keeps the integrity of the table up even if the samples have different numbers of processed data
-                let maxNumProcessedData = 
-                    ps.LastSamples |> List.map (ps.ProcessedDataOf >> Seq.length) |> List.max
-                for i = 0 to maxNumProcessedData - 1 do
-                    column {
-                        "processed data file"
-                        for sample in ps.LastSamples do
-                            sample.ProcessedData |> List.tryItem i |> Option.map (fun n -> n.Name) |> Option.defaultValue ""                       
-                    }
+                // Until then, this might be one possiblity that kees the integrity of the table up even if the samples have different numbers of processed data
+                if s.LastSamples |> List.map (s.ProcessedDataOf >> Seq.length) |> List.isEmpty |> not then
+                    let maxNumProcessedData = 
+                        s.LastSamples |> List.map (s.ProcessedDataOf >> Seq.length) |> List.max
+                    for i = 0 to maxNumProcessedData - 1 do
+                        column {
+                            "processed data file"
+                            for sample in s.LastSamples do
+                                sample.ProcessedData |> List.tryItem i |> Option.map (fun n -> n.Name) |> Option.defaultValue ""                       
+                        }
+                else dropSheet (message "No processed data found in any sheet.")
 
-                let maxNumRawData = 
-                    ps.LastSamples |> List.map (ps.RawDataOf >> Seq.length) |> List.max
-                for i = 0 to maxNumRawData - 1 do
-                    column {
-                        "raw data file"
-                        for sample in ps.LastSamples do
-                            sample.RawData |> List.tryItem i |> Option.map (fun n -> n.Name) |> Option.defaultValue ""                       
-                    }
+                if s.LastSamples |> List.map (s.RawDataOf >> Seq.length) |> List.isEmpty |> not then
+                    let maxNumRawData = 
+                        s.LastSamples |> List.map (s.RawDataOf >> Seq.length) |> List.max
+                    for i = 0 to maxNumRawData - 1 do
+                        column {
+                            "raw data file"
+                            for sample in s.LastSamples do
+                                sample.RawData |> List.tryItem i |> Option.map (fun n -> n.Name) |> Option.defaultValue ""                       
+                        }
+                else dropSheet (message "No raw data found in any sheet.")
 
                 // ---- Protocols section ----
                 row
@@ -238,8 +197,8 @@ let main argv =
                     "growth protocol"
                     optional
                     cells {
-                        for protocol in ps.Protocols do
-                            whereProtocolTypeIsChildOf ontology (OntologyAnnotation.fromString "growth protocol" "EFO" "EFO:0003789")
+                        for protocol in s.Protocols do
+                            whereProtocolTypeIsChildOf geoOntology (OntologyAnnotation.fromString "growth protocol" "EFO" "EFO:0003789")
                             selectDescriptionText
                             exactlyOne
                     }
@@ -248,8 +207,8 @@ let main argv =
                     "treatment protocol"
                     optional
                     cells {
-                        for protocol in ps.Protocols do
-                            whereProtocolTypeIsChildOf ontology (OntologyAnnotation.fromString "treatment protocol" "DPBO" "DPBO:1000168")
+                        for protocol in s.Protocols do
+                            whereProtocolTypeIsChildOf geoOntology (OntologyAnnotation.fromString "treatment protocol" "DPBO" "DPBO:1000168")
                             selectDescriptionText
                             exactlyOne
                     }
@@ -259,8 +218,8 @@ let main argv =
                     "extract protocol"
                     required
                     cells {
-                        for protocol in ps.Protocols do
-                            whereProtocolTypeIsChildOf ontology (OntologyAnnotation.fromString "extraction protocol" "DPBO" "DPBO:1000171")
+                        for protocol in s.Protocols do
+                            whereProtocolTypeIsChildOf geoOntology (OntologyAnnotation.fromString "extraction protocol" "DPBO" "DPBO:1000171")
                             selectDescriptionText
                             exactlyOne
                     }
@@ -274,9 +233,9 @@ let main argv =
                     "library strategy"
                     required
                     cells {
-                        for i in ps.Values() do
+                        for i in s.Values() do
                             whereName "Library Selection"
-                            asValueOfOntology ontology "GEO"
+                            asValueOfOntology geoOntology "GEO"
                             selectValueText
                             exactlyOne                       
                     }
@@ -284,7 +243,7 @@ let main argv =
             
                 for cell in 
                     cells {
-                        for protocol in ps.Protocols do
+                        for protocol in s.Protocols do
                             whereSoftwareProtocol
                             selectDescriptionText
                             atLeastN 1
@@ -301,7 +260,7 @@ let main argv =
                     "genome build/assembly"
                     required
                     cells {
-                        for i in ps.Values() do
+                        for i in s.Values() do
                             whereName "genome reference sequence"
                             distinct
                             selectValueText
@@ -311,7 +270,7 @@ let main argv =
 
                 for cell in 
                     cells {
-                        for i in ps.Values() do
+                        for i in s.Values() do
                             whereName "processed data file format"
                             distinct
                             selectValueText
@@ -327,37 +286,5 @@ let main argv =
             }
         }
 
-    let messagesOutPath = Path.Combine(arcDir,".arc/OutputMessages.txt")
+)
 
-    let writeMessages (messages : Message list) =
-        messages
-        |> List.map (fun m -> m.AsString())
-        |> List.toArray
-        |> Array.distinct
-        |> fun messages -> 
-            File.WriteAllLines(messagesOutPath,messages)
-
-    match output with
-    | Some (workbook,messages) -> 
-        workbook.Parse().ToFile(outPath)
-        writeMessages messages
-        1
-    | NoneOptional messages | NoneRequired messages ->
-        writeMessages messages
-        printfn "Arc could not be converted to GEO, as some required values could not be retreived, check %s for more info" messagesOutPath
-        if promptYesNo "Do you want missing fields to be written back into ARC? (y/n)" then
-            let transformations = 
-                messages
-                |> ErrorHandling.getStudyformations "GEO"
-                |> List.distinct       
-            let updatedStudy = 
-                transformations
-                |> List.fold (fun s transformation -> transformation.Transform s) study        
-            let updatedArc = 
-                investigation
-                |> API.Investigation.mapStudies
-                    (API.Study.updateByIdentifier API.Update.UpdateAll updatedStudy)
-                |> API.Investigation.update
-            Study.overWrite arcDir updatedStudy
-            Investigation.overWrite arcDir updatedArc
-        0

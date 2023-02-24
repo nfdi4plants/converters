@@ -19,58 +19,12 @@ jobs:
     - name: Install FSharpPacker
       run: dotnet tool install --global FSharpPacker
     - name: Pack
-      run: fspack converters/arc-convert-geo.fsx -o pkg/win-x64 -r win-x64 -f net7.0
+      run: fspack converters/arc-convert-geo.fsx -o pkg -f net7.0
     - uses: "marvinpinto/action-automatic-releases@latest"
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
-        automatic_release_tag: "v0.0.1-win.x64"
+        automatic_release_tag: "v0.0.1"
         prerelease: false
-        title: "v0.0.1-win.x64"
+        title: "v0.0.1"
         files: |
-            pkg/win-x64/arc-convert-geo.dll
-
-  release-github-linux:
-    
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v3
-    - name: Setup .NET 7.0
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '7.0.x'
-    - name: Install FSharpPacker
-      run: dotnet tool install --global FSharpPacker
-    - name: Pack
-      run: fspack converters/arc-convert-geo.fsx -o pkg/linux-x64 -r linux-x64 -f net7.0 -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
-    - uses: "marvinpinto/action-automatic-releases@latest"
-      with:
-        repo_token: "${{ secrets.GITHUB_TOKEN }}"
-        automatic_release_tag: "v0.0.1-linux.x64"
-        prerelease: false
-        title: "v0.0.1-linux.x64"
-        files: |
-            pkg/linux-x64/arc-convert-geo
-
-  release-github-macos:
-    
-    runs-on: macos-latest
-
-    steps:
-    - uses: actions/checkout@v3
-    - name: Setup .NET 7.0
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '7.0.x'
-    - name: Install FSharpPacker
-      run: dotnet tool install --global FSharpPacker
-    - name: Pack
-      run: fspack converters/arc-convert-geo.fsx -o pkg/osx-x64 -r osx-x64 -f net7.0 -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
-    - uses: "marvinpinto/action-automatic-releases@latest"
-      with:
-        repo_token: "${{ secrets.GITHUB_TOKEN }}"
-        automatic_release_tag: "v0.0.1-osx.x64"
-        prerelease: false
-        title: "v0.0.1-osx.x64"
-        files: |
-            pkg/osx-x64/arc-convert-geo
+            pkg/arc-convert-geo.dll
