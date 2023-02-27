@@ -24,7 +24,7 @@ type ISAQueryBuilder with
     [<CustomOperation "adjustToCharLimits">]
     member this.AdjustToCharLimits(source: QuerySource<string, 'Q>, minLimit, maxLimit) =
         match text.Length with
-        | x when x < minLimit -> ""
+        | x when x < minLimit -> failwith ""
         | x when x > maxLimit -> $"{text[.. maxLimit - 1 - 5]}[...]"
         | _ -> text
 
@@ -32,7 +32,12 @@ sheet "" {
     row {
         "MTD"
         "submitter_name"
-        !! $"{investigation.Contacts.Value.Head.FirstName.Value} {investigation.Contacts.Value.Head.MidInitials.Value} {investigation.Contacts.Value.Head.LastName.Value}"
+        cell {
+            !! (Investigation.contacts >> Person.firstName) i
+            !? (Investigation.contacts >> Person.midInitials) i
+            !! (Investigation.contacts >> Person.lastname) i
+            Concat ','
+        }
         required
     }
     row {
