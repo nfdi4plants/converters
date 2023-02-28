@@ -1,13 +1,15 @@
-#r "nuget: arcIO.NET, 0.1.0-preview.5" 
+#r "nuget: arcIO.NET, 0.1.0-preview.6" 
 #r "nuget: FSharp.Data, 5.0.2"
 
+//#r @"C:\Users\HLWei\source\repos\FsSpreadsheet\src\FsSpreadsheet\bin\Release\netstandard2.0\FsSpreadsheet.dll"
+//#r @"C:\Users\HLWei\source\repos\ISADotNet\src\ISADotNet.QueryModel\bin\Release\netstandard2.0\ISADotNet.dll"
+//#r @"C:\Users\HLWei\source\repos\ISADotNet\src\ISADotNet.QueryModel\bin\Release\netstandard2.0\ISADotNet.QueryModel.dll"
 open ISADotNet
 open ISADotNet.QueryModel
 open ISADotNet.QueryModel.Linq.Spreadsheet
 open arcIO.NET.Converter
 open FsSpreadsheet.DSL
 open FSharp.Data
-
 
 
 let create() = ARCconverter.ARCtoXLSX (
@@ -25,12 +27,22 @@ let create() = ARCconverter.ARCtoXLSX (
                 row {
                     "title"
                     required
-                    !! s.Title
+                    (+.) Study.title s
+                    //Study.title >! s
                 }
+               
                 row {
                     "summary (abstract)"
                     required
-                    !! s.Description
+                    (+.) Study.description s
+                }
+                row {
+                    required
+                    cells {
+                        for d in Study.designDescriptors s do
+                            selectText
+                            concat ','
+                    }
                 }
                 if s.Contacts.IsNone then dropSheet (message "No contributors in the assay file")
                 for person in s.Contacts |> Option.defaultValue [] do
@@ -39,9 +51,10 @@ let create() = ARCconverter.ARCtoXLSX (
                         optional
                         cell {
                             Concat ','
-                            !! person.FirstName
-                            !? person.MidInitials
-                            !! person.LastName
+                            (+.) Person.firstName person
+                            (-.) Person.midInitials person
+                            (+.) Person.lastName person
+
                         }
                     }
 
@@ -68,7 +81,19 @@ let create() = ARCconverter.ARCtoXLSX (
                     for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
-                                whereCategory "Organism" "DPBO" "DPBO:11111111"
+                                whereCategory "Organism" "OBI" "OBI:0100026"
+                                selectValueText
+                                head
+                                required
+                        }               
+                }
+                column {
+                    "tissue"
+                    optional
+                    for sample in s.LastSamples do
+                        cells {
+                            for value in sample.Values do
+                                whereCategory "Tissue" "Decoy" "1"
                                 selectValueText
                                 head
                                 required
@@ -80,7 +105,7 @@ let create() = ARCconverter.ARCtoXLSX (
                     for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
-                                whereName "Cell line"
+                                whereCategory "cell line" "OBI" "OBI:0100026"
                                 selectValueText
                                 head
                                 required
@@ -104,7 +129,7 @@ let create() = ARCconverter.ARCtoXLSX (
                     for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
-                                whereName "Genotype"
+                                whereCategory "genotype" "EFO" "EFO:0000513"
                                 selectValueText
                                 head
                                 optional
@@ -116,7 +141,7 @@ let create() = ARCconverter.ARCtoXLSX (
                     for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
-                                whereName "Library Selection"
+                                whereCategory "molecule" "MS" "MS:1000859"
                                 //asValueOfOntology ontology "GEO" // for example: complementary DNA (DPBO) -> cDNA (GEO)
                                 selectValueText
                                 head
@@ -129,7 +154,7 @@ let create() = ARCconverter.ARCtoXLSX (
                     for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
-                                whereName "Library layout"
+                                whereCategory "library strategy" "DPBO" "0000035"
                                 //asValueOfOntology "GEO"
                                 selectValueText
                                 head
@@ -137,31 +162,18 @@ let create() = ARCconverter.ARCtoXLSX (
                         }               
                 }
                 column {
-                    "age"
-                    optional
-                    for sample in s.LastSamples do
-                        cells {
-                            for value in sample.Values do
-                                whereName "time"
-                                selectValueText
-                                head
-                                required
-                        }  
-                
-                } 
-                column {
                     "instrument model"
                     required
                     for sample in s.LastSamples do
                         cells {
                             for value in sample.Values do
-                                whereName "next generation sequencing instrument model"                                 // this
-                                //whereCategoryIsChildOf (OntologyAnnotation.fromString "instrument model" "source" "id") // or this?
-                                //whereCategoryIsChildOf (OntologyAnnotation.fromString "instrument" "EFO" "http://www.ebi.ac.uk/efo/EFO_0000548") // or this?
+                                whereCategory "instrument model" "MS" "1000031"
+                                //asValueOfOntology "GEO"
                                 selectValueText
                                 head
+                                optional
                         }               
-                }
+                }                
 
 
                 // This is kind of a tricky task for a general purpose query model, as the number of columns depends on the given input
@@ -174,7 +186,7 @@ let create() = ARCconverter.ARCtoXLSX (
                         column {
                             "processed data file"
                             for sample in s.LastSamples do
-                                sample.ProcessedData |> List.tryItem i |> Option.map (fun n -> n.Name) |> Option.defaultValue ""                       
+                                sample.ProcessedData |> List.tryItem i |> Option.map (fun n -> n.Name) |> Option.defaultValue ""
                         }
                 else dropSheet (message "No processed data found in any sheet.")
 
@@ -185,7 +197,7 @@ let create() = ARCconverter.ARCtoXLSX (
                         column {
                             "raw data file"
                             for sample in s.LastSamples do
-                                sample.RawData |> List.tryItem i |> Option.map (fun n -> n.Name) |> Option.defaultValue ""                       
+                                sample.RawData |> List.tryItem i |> Option.map (fun n -> n.Name) |> Option.defaultValue ""
                         }
                 else dropSheet (message "No raw data found in any sheet.")
 
@@ -198,7 +210,7 @@ let create() = ARCconverter.ARCtoXLSX (
                     optional
                     cells {
                         for protocol in s.Protocols do
-                            whereProtocolTypeIsChildOf geoOntology (OntologyAnnotation.fromString "growth protocol" "EFO" "EFO:0003789")
+                            whereProtocolTypeIsChildOf geoOntology "growth protocol" "EFO" "EFO:0003789"
                             selectDescriptionText
                             exactlyOne
                     }
@@ -208,7 +220,7 @@ let create() = ARCconverter.ARCtoXLSX (
                     optional
                     cells {
                         for protocol in s.Protocols do
-                            whereProtocolTypeIsChildOf geoOntology (OntologyAnnotation.fromString "treatment protocol" "DPBO" "DPBO:1000168")
+                            whereProtocolTypeIsChildOf geoOntology "treatment protocol" "DPBO" "DPBO:1000168"
                             selectDescriptionText
                             exactlyOne
                     }
@@ -278,7 +290,7 @@ let create() = ARCconverter.ARCtoXLSX (
                     }
                     do 
                         row {
-                            "data processing step"
+                            "processed data files format and content"
                             required
                             cell
                         }
@@ -287,4 +299,3 @@ let create() = ARCconverter.ARCtoXLSX (
         }
 
 )
-
