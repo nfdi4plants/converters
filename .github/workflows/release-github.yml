@@ -19,7 +19,8 @@ jobs:
     - name: Install FSharpPacker
       run: dotnet tool install --global FSharpPacker
     - name: Pack
-      run: fspack converters/arc-convert-geo.fsx -o pkg -f net7.0
+      run: fspack converters/arc-convert-geo.fsx -o pkg/geo -f net7.0
+      run: fspack converters/arc-convert-invenio.fsx -o pkg/invenio -f net7.0
     - uses: "marvinpinto/action-automatic-releases@latest"
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -27,4 +28,5 @@ jobs:
         prerelease: false
         title: "v0.0.1"
         files: |
-            pkg/arc-convert-geo.dll
+            pkg/geo/arc-convert-geo.dll
+            pkg/invenio/arc-convert-invenio.dll
