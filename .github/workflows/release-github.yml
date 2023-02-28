@@ -18,8 +18,9 @@ jobs:
         dotnet-version: '7.0.x'
     - name: Install FSharpPacker
       run: dotnet tool install --global FSharpPacker
-    - name: Pack
+    - name: Pack geo
       run: fspack converters/arc-convert-geo.fsx -o pkg/geo -f net7.0
+    - name: Pack invenio
       run: fspack converters/arc-convert-invenio.fsx -o pkg/invenio -f net7.0
     - uses: "marvinpinto/action-automatic-releases@latest"
       with:
